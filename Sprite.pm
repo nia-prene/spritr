@@ -73,9 +73,9 @@ sub tile_palette{
 	my $tile_x = ($tile % ($self->pixel_width / 8)) * 8;
 	my $tile_y = (int(($tile) / ($self->pixel_width / 8)))* TILE_HEIGHT;
 	#for each pixel row in this tile	
-	for (my $row = $tile_y; $row < ($tile_y + TILE_HEIGHT); $row++){
+	for my $row ($tile_y..($tile_y + (TILE_HEIGHT-1))) {
 		#for each pixel in that row
-		for (my $column = $tile_x; $column < ($tile_x + 8); $column++){
+		for my $column ($tile_x..($tile_x + 8)-1) {
 			#get the hex color
 			my $color = $self->pixels->[$row][$column];
 			#pop the color in the hash
@@ -102,7 +102,7 @@ sub is_tile_valid{
 sub measure_valid_tiles{
 	my $self = shift;
 	my $valid_count = 0;
-	for (my $tile = 0; $tile < $self->tile_count; $tile++) {
+	for my $tile (0..$self->tile_count-1) {
 		if ($self->is_tile_valid($tile)) {
 			$valid_count++;
 		}
@@ -165,11 +165,9 @@ sub move_sprite_horizontally{
 		#cut off the end of every row and prepend it
 		for my $row (@{$self->pixels}) {
 			unshift(@{$row},
-				splice(@{$row},
-					$x_movements * -1));
+				splice(@{$row}, $x_movements * -1));
 		}
 	}
-	return;
 }
 
 
@@ -188,7 +186,6 @@ sub move_sprite_vertically{
 		unshift(@{$self->pixels},
 			splice(@{$self->pixels}, $y_movements * -1));
 	}
-	return;
 }
 1;
 =pod
@@ -219,26 +216,6 @@ sub test_row{
 	return 1;
 }
 
-
-sub resolve_sprt{
-
-	my ($sprt,$pxwdth,$pxhght,$tlwdth,$tlhght,$tlcnt)=@_;
-	my @bdclmns=();
-	my @bdrws=();
-	for (my $tile_row=0;$tile_row<$tlhght;$tile_row++){
-	}
-
-	for (my $clmn=0;$clmn<$tlwdth;$clmn++){
-		for (my $tl=$clmn;$tl<$tlcnt;$tl+=$tlwdth){
-			if (!test_tl($sprt,$pxwdth,$pxhght,$tl,$tlcnt)){
-				push @bdclmns, $clmn;
-			}
-		}
-	}
-}
-sub test_right_edge{
-	
-}
 =cut
 
 
