@@ -33,7 +33,8 @@ declare nesmap=$(\
 		| tac -rs .. \
 		| sed 's/^..//')
 		# search the nes colors for the hex color
-		echo -n "$color "
+		echo -n "${colors[0x$color]} "
+
 		((writ++))
 		newline=$(bc<<<"$writ%$pxwidth")
 		if !((newline))
