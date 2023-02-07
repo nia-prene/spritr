@@ -1,7 +1,5 @@
 #!/bin/bash
 
-source colors.sh
-
 declare colorargs=""
 
 for i in "${!colors[@]}"

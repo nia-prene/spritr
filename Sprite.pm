@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 #sprite tile dimensions
-use constant TILE_HEIGHT => 16;
+use constant TILE_HEIGHT => 8;
 use constant TILE_WIDTH => 8;
 use constant BIT_DEPTH => 4;
 
@@ -607,8 +607,8 @@ sub move_tile_column_vertical {
 sub write_header {
 	my $self = shift;
 
-	printf "Subsprites\t%2d\n", $self->measure_tiles_used;
-	printf "Palettes\t%2d\n", scalar(@{$self->measure_valid_palettes});
+	printf "Subsprites\t%d\n", $self->measure_tiles_used;
+	printf "Palettes\t%d\n", scalar(@{$self->measure_valid_palettes});
 	printf "Background\t%02X\n", hex($self->background_color);
 }
 
@@ -617,7 +617,7 @@ sub write_palettes {
 	my $self = shift;
 	
 	for my $i (0..$#{$self->palettes}) {
-		printf "Palette%02X:\t", $i;
+		printf "  Palette%02X:\t", $i;
 		for my $color (sort keys %{$self->palettes->[$i]}) {
 			printf "%02X ", hex($color);
 		}
@@ -633,7 +633,7 @@ sub write_all_tiles {
 		if ($self->is_tile_used($tile)) {
 			
 			# print the number and coordinate
-			printf "Sprite%02X\t", $tiles_written;
+			printf "  Tile%02X\t", $tiles_written;
 			$self->write_tile_coordinates($tile, 
 				$tiles_written++);
 			# print the binary tile
@@ -667,14 +667,14 @@ sub write_tile_pixels {
 		}
 	}
 
-	print "Palette\t\t", $palette_number, "\n";
+	printf "  Palette\t%02X\n", $palette_number;
 	#get the top left pixel of the pixel data
 	my $tile_x = ($tile % $self->tile_width) * TILE_WIDTH;
 	my $tile_y = int($tile / $self->tile_width) * TILE_HEIGHT;
 	my $line = 0;
 	#for each pixel row in this tile	
 	for my $row ($tile_y..($tile_y + (TILE_HEIGHT - 1))) {
-		printf ".\t\t";
+		printf "  .\t\t";
 		#for each pixel in that row
 		for my $column ($tile_x..($tile_x + TILE_WIDTH)-1) {
 			for my $i (0..$#final_palette){
@@ -738,7 +738,7 @@ sub write_tile_coordinates {
 	}
 	
 	# write the coordinates
-	printf "%4d,%4d\n", $tile_x,$tile_y;
+	printf "%d,%d\n", $tile_x,$tile_y;
 }
 
 
