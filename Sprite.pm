@@ -4,9 +4,9 @@ use strict;
 use warnings;
 
 #sprite tile dimensions
-use constant TILE_HEIGHT => 8;
+use constant TILE_HEIGHT => 16;
 use constant TILE_WIDTH => 8;
-use constant BIT_DEPTH => 4;
+use constant BIT_DEPTH => 2;
 
 sub new{
 	my $class = shift;
@@ -37,10 +37,7 @@ sub new{
 	$self->confirm_sprite;
 
 	# shift the sprite around to resolve at bitdepth
-	if (!$self->resolve_tile_layout) {
-		die "target exceeds bitdepth, no layered sprites yet";
-	}
-	# write resolve info
+	$self->resolve_tile_layout;
 	#$self->write_resolved_coordinates;
 	
 	# find the cheapest version of this and move them there
@@ -50,14 +47,10 @@ sub new{
 	# establish the cononical palettes
 	$self->palettes($self->measure_valid_palettes);
 
-	# write file header to stdout
 	$self->write_header;
-	
 	$self->write_palettes;
-	# print tile data to stdout
 	$self->write_all_tiles;
-	# $self->write_optimization_information;
-	# $self->write_pixels;
+	
 	return $self;
 };
 
@@ -255,12 +248,6 @@ sub resolve_tile_layout{
 	$self->move_sprite(0, TILE_HEIGHT);
 	#move to the best y offset
 	$self->move_sprite(0, $best_y_offset);
-
-	if ($best_valid_tiles == $self->tile_count) {
-		return 1;
-	} else {
-		return 0;
-	}
 }
 
 
@@ -431,7 +418,7 @@ sub measure_valid_palettes{
 	# get all the palettes
 	for my $tile (0..$self->tile_count-1) {
 		my $palette = $self->tile_palette($tile);
-		if(scalar %{$palette} < BIT_DEPTH) {
+		if(scalar %{$palette} < (BIT_DEPTH ** BIT_DEPTH)) {
 			push(@palettes, $palette);
 		}
 	}
@@ -466,7 +453,7 @@ sub is_tile_valid{
 	# get palette
 	my $palette = $self->tile_palette($tile);
 	# if within bit depth (not including background)
-	if ((scalar %{$palette}) < BIT_DEPTH){
+	if ((scalar %{$palette}) < (BIT_DEPTH ** BIT_DEPTH)){
 		return 1;
 	}
 	return 0;
@@ -672,28 +659,27 @@ sub write_tile_pixels {
 	my $tile_x = ($tile % $self->tile_width) * TILE_WIDTH;
 	my $tile_y = int($tile / $self->tile_width) * TILE_HEIGHT;
 	my $line = 0;
+	
+	for my $plane (0..BIT_DEPTH-1) {
+
 	#for each pixel row in this tile	
-	for my $row ($tile_y..($tile_y + (TILE_HEIGHT - 1))) {
-		printf "  .\t\t";
-		#for each pixel in that row
-		for my $column ($tile_x..($tile_x + TILE_WIDTH)-1) {
-			for my $i (0..$#final_palette){
-				if (hex($self->pixels->[$row][$column]) 
-					== hex($final_palette[$i])) {
-					print $i & 0b1;
+		for my $row ($tile_y..($tile_y + (TILE_HEIGHT - 1))) {
+			printf "  .\t\t";
+			#for each pixel in that row
+			for my $column ($tile_x..
+				($tile_x + TILE_WIDTH)-1) {
+				for my $i (0..$#final_palette){
+					if (hex(
+					$self->pixels->[$row][$column]) 
+						== hex(
+						$final_palette[$i])) {
+						my $bit = ($i & (0b1<<$plane)) >> $plane;
+						print $bit;
+					}
 				}
 			}
+			print "\n";
 		}
-		print "\t";
-		for my $column ($tile_x..($tile_x + TILE_WIDTH)-1) {
-			for my $i (0..$#final_palette){
-				if (hex($self->pixels->[$row][$column]) 
-					== hex($final_palette[$i])) {
-					print (($i & 0b10)>>1);
-				}
-			}
-		}
-		print "\n";
 	}
 }
 
