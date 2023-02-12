@@ -36,18 +36,19 @@ sub new{
 	# confirm data is valid
 	$self->confirm_sprite;
 
-	# shift the sprite around to resolve at bitdepth
+	# shift the sprite around to find best config
 	$self->optimize_position;
-	$self->write_resolved_coordinates;
-	
-	# find the cheapest version of this and move them there
+	#$self->write_resolved_coordinates;
+
+	# shift rows and columns around to find best config
 	$self->optimize_tiles;
+	#$self->write_optimizations;
 	
 	# establish the cononical palettes
-	$self->palettes($self->get_palettes_valid);
+	$self->palettes(($self->get_palettes)[0]);
 
-	#$self->write_header;
-	#$self->write_palettes;
+	$self->write_header;
+	$self->write_palettes;
 	#$self->write_all_tiles;
 	
 	return $self;
@@ -131,24 +132,6 @@ sub best_offsets_row {
 }
 
 
-sub lowest_tiles_row {
-	my $self = shift;
-	if (@_) {
-		$self->{lowest_tiles_row} = shift;
-	}
-	return $self->{lowest_tiles_row};
-}
-
-
-sub lowest_tiles_column {
-	my $self = shift;
-	if (@_) {
-		$self->{lowest_tiles_column} = shift;
-	}
-	return $self->{lowest_tiles_column};
-}
-
-
 sub palettes{
 	my $self = shift;
 	if (@_) {
@@ -205,64 +188,58 @@ sub confirm_sprite{
 
 sub optimize_position{
 	my $self = shift;
+	my $lowest_invalids = $self->measure_invalid_tiles;
+	my $lowest_palettes = $self->measure_palettes;
 	my $best_offset_x = 0;
 	my $best_offset_y = 0;
-	do {
-		$best_offset_x = 0;
-		$best_offset_y = 0;
-		my $lowest_invalids = $self->measure_invalid_tiles;
-		my $lowest_palettes = $self->measure_palettes;
 	
-		#move entire sprite 1 pixel left at a time
-		for my $i (1..TILE_WIDTH) {
-			$self->move_sprite(-1,0);
-			
-			#count invalid tiles and palettes
-			my $invalids = $self->measure_invalid_tiles;
-			my $palettes = $self->measure_palettes;
-
-			#if this configuration has less bad tiles
-			if (($invalids < $lowest_invalids) ||
-
-			# or equal bad tiles and less palettes	
-			($invalids == $lowest_invalids &&
-			$palettes < $lowest_palettes)) {
-				
-				#then this is the new best
-				$best_offset_x = $i * -1;
-				$lowest_invalids = $palettes;
-				$lowest_invalids = $palettes;
-			}
-		}
-		#move sprite to the best offset
-		$self->move_sprite(TILE_WIDTH + $best_offset_x, 0);
+	#move entire sprite 1 pixel left at a time
+	for my $i (1..TILE_WIDTH) {
+		$self->move_sprite(-1,0);
 		
-		# move sprite up one tile at a time
-		for my $i (1..TILE_HEIGHT) {
-			$self->move_sprite(0,-1);
-			
-			# measure the palettes and bad tiles
-			my $invalids = $self->measure_invalid_tiles;
-			my $palettes = $self->measure_palettes;
+		#count invalid tiles and palettes
+		my $invalids = $self->measure_invalid_tiles;
+		my $palettes = $self->measure_palettes;
+		
+		#if this configuration has less bad tiles
+		if (($invalids < $lowest_invalids) ||
 
-			# if less bad tiles
-			if ($invalids < $lowest_invalids
+		# or equal bad tiles and less palettes	
+		($invalids == $lowest_invalids &&
+		$palettes < $lowest_palettes)) {
 			
-			# or same bad tiles but less palettes	
-			||($invalids == $lowest_invalids
-			&& $palettes < $lowest_palettes)) {
-				
-				# this is the new best
-				$best_offset_y= $i * -1;
-				$lowest_invalids = $invalids;
-				$lowest_palettes = $palettes;
-			}
+			#then this is the new best
+			$best_offset_x = $i * -1;
+			$lowest_invalids = $invalids;
+			$lowest_palettes = $palettes;
 		}
-		#move to optimal spot
-		$self->move_sprite(0, TILE_HEIGHT + $best_offset_y);
+	}
+	#move sprite to the best offset
+	$self->move_sprite(TILE_WIDTH + $best_offset_x, 0);
 	
-	# while optimizations are being found
-	} while ($best_offset_x != 0 && $best_offset_y != 0);
+	# move sprite up one tile at a time
+	for my $i (1..TILE_HEIGHT) {
+		$self->move_sprite(0,-1);
+		
+		# measure the palettes and bad tiles
+		my $invalids = $self->measure_invalid_tiles;
+		my $palettes = $self->measure_palettes;
+
+		# if less bad tiles
+		if ($invalids < $lowest_invalids
+		
+		# or same bad tiles but less palettes	
+		||($invalids == $lowest_invalids
+		&& $palettes < $lowest_palettes)) {
+				
+			# this is the new best
+			$best_offset_y= $i * -1;
+			$lowest_invalids = $invalids;
+			$lowest_palettes = $palettes;
+		}
+	}
+	#move to optimal spot
+	$self->move_sprite(0, TILE_HEIGHT + $best_offset_y);
 }
 
 
@@ -298,9 +275,9 @@ sub optimize_tiles{
 			|| ($invalids == $lowest_invalids
 			&& $palettes < $lowest_palettes)
 			
-			# or is resolved, uses the same palettes, less tiles
-			|| (!$invalids
-			&& $palettes == $lowest_palettes
+			# or has valids, less or same palettes, less tiles
+			|| ($invalids == $lowest_invalids
+			&& $palettes <= $lowest_palettes
 			&& $consumed < $lowest_consumed)) {
 				
 				# this is the new best config, congrats!
@@ -353,9 +330,9 @@ sub optimize_tiles{
 			|| ($invalids == $lowest_invalids
 			&& $palettes < $lowest_palettes)
 			
-			# or is resolved, same palettes, less tiles
-			|| (!$invalids
-			&& $palettes == $lowest_palettes
+			# or is resolved, same or less palettes, less tiles
+			|| ($invalids == $lowest_invalids
+			&& $palettes <= $lowest_palettes
 			&& $consumed < $lowest_consumed)) {
 
 			# this is the new best one! congrats!
@@ -407,37 +384,18 @@ sub optimize_tiles{
 			$self->move_tile_row_horizontal($tile_row,
 				$best_offsets_row[$tile_row]);
 		}
-		print "@best_offsets_row ", "\n";
+		# save the offsets and set other as false
+		$self->best_offsets_row(\@best_offsets_row);
+		$self->best_offsets_column(0);
 	} else {
 		for my $tile_column (0..$self->tile_width - 1){
 			$self->move_tile_column_vertical($tile_column,
 				$best_offsets_column[$tile_column]);
 		}
-		print "@best_offsets_column ", "\n";
+		# save the offsets and set other as false
+		$self->best_offsets_column(\@best_offsets_column);
+		$self->best_offsets_row(0);
 	}
-}
-
-
-sub is_valid_layout {
-	my $self = shift;
-	for my $tile (0..$self->tile_count-1) {
-		if (!$self->is_tile_valid($tile)) {
-			return 0;
-		}
-	}
-	return 1;
-}
-
-
-sub measure_valid_tiles{
-	my $self = shift;
-	my $valid_count = 0;
-	for my $tile (0..$self->tile_count-1) {
-		if ($self->is_tile_valid($tile)) {
-			$valid_count++;
-		}
-	}
-	return $valid_count;
 }
 
 
@@ -456,71 +414,66 @@ sub measure_invalid_tiles{
 
 sub measure_palettes{
 	my $self = shift;
-	my $valids = $self->get_palettes_valid;
-	my $invalids = $self->get_palettes_invalid;
+	my ($valids, $invalids) = $self->get_palettes;
 	my $total = scalar(@$valids) + scalar(@$invalids);
 	return $total;
 }
 
 
-sub get_palettes_valid{
+sub get_palettes{
 	my $self = shift;
-	my @palettes;
+	my @valids;
+	my @invalids;
 	# get all the palettes
 	for my $tile (0..$self->tile_count-1) {
 		my $palette = $self->tile_palette($tile);
+		# if within bitdepth add to valid collection
 		if(scalar %{$palette} < (BIT_DEPTH ** BIT_DEPTH)) {
-			push(@palettes, $palette);
+			push(@valids, $palette);
+
+		# else add to invalid collection
+		} else {
+			push(@invalids, $palette);
 		}
 	}
 	#pull of each palette one by one
-	for my $i (0..$#palettes) {
-		my $test_palette = shift(@palettes);
+	for my $i (0..$#valids) {
+		my $test_palette = shift(@valids);
+
+		#clear the duplicate flag
 		my $duplicate = 0;
+
 		#compare to the rest of the palettes
-		for my $palette (@palettes) {
+		for my $palette (@valids) {
+
+			#make a collection of matching colors
 			my @matches = ();
 			for my $color (keys %{$test_palette}) {
 				if (exists $palette->{$color}) {
 				push(@matches, $color);
-				}	
+				}
 			}
+			# if all colors are matches, duplicate
 			if (scalar %{$test_palette} == scalar @matches) {
 				$duplicate = 1;
 				last;
 			}
 		}
+		# if original, save
 		if (!$duplicate) {
-			push(@palettes, $test_palette);
+			push(@valids, $test_palette);
 		}
 	}
-	return \@palettes;
-}
-
-
-sub get_palettes_invalid{
-	my $self = shift;
-	my @palettes;
 	
-	# get all the palettes
-	for my $tile (0..$self->tile_count-1) {
-		my $palette = $self->tile_palette($tile);
-
-		# if more colors than allowed
-		if(scalar %{$palette} >= (BIT_DEPTH ** BIT_DEPTH)) {
-			# add to collection
-			push(@palettes, $palette);
-		}
-	}
 	#pull of each palette one by one
-	for my $i (0..$#palettes) {
-		my $test_palette = shift(@palettes);
+	for my $i (0..$#invalids) {
+		my $test_palette = shift(@invalids);
 
 		# clear the duplicate flag
 		my $duplicate = 0;
 
 		#compare to the rest of the palettes
-		for my $palette (@palettes) {
+		for my $palette (@invalids) {
 
 			# test all colors
 			my @matches = ();
@@ -542,10 +495,10 @@ sub get_palettes_invalid{
 		# if it's not a duplicate
 		if (!$duplicate) {
 			# save it as a unique
-			push(@palettes, $test_palette);
+			push(@invalids, $test_palette);
 		}
 	}
-	return \@palettes;
+	return (\@valids, \@invalids);
 }
 
 
@@ -842,17 +795,15 @@ sub write_pixels {
 }
 
 
-sub write_optimization_information {
+sub write_optimizations{
 	my $self = shift;
 
-	if ($self->lowest_tiles_row <= $self->lowest_tiles_row) {
-		printf "row won with\t%2d\n", $self->lowest_tiles_row;
-		printf "columns had\t%2d\n", $self->lowest_tiles_column;
+	if ($self->best_offsets_row) {
+		printf "row won with\t%2d\n", $self->measure_tiles_used;
 		print @{$self->best_offsets_row},"\n";
 	}
-	if ($self->lowest_tiles_column < $self->lowest_tiles_column) {
-		printf "column won with\t%2d\n", $self->lowest_tiles_column;
-		printf "rows had\t%2d\n", $self->lowest_tiles_row;
+	if ($self->best_offsets_column) {
+		printf "column won with\t%2d\n", $self->measure_tiles_used;
 		print @{$self->best_offsets_column},"\n";
 	}
 }
