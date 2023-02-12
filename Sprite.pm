@@ -44,7 +44,7 @@ sub new{
 	$self->optimize_tiles;
 	
 	# establish the cononical palettes
-	$self->palettes($self->measure_valid_palettes);
+	$self->palettes($self->get_palettes_valid);
 
 	#$self->write_header;
 	#$self->write_palettes;
@@ -211,8 +211,7 @@ sub optimize_position{
 		$best_offset_x = 0;
 		$best_offset_y = 0;
 		my $lowest_invalids = $self->measure_invalid_tiles;
-		my $lowest_palettes = scalar(
-			@{$self->measure_valid_palettes});
+		my $lowest_palettes = $self->measure_palettes;
 	
 		#move entire sprite 1 pixel left at a time
 		for my $i (1..TILE_WIDTH) {
@@ -220,8 +219,7 @@ sub optimize_position{
 			
 			#count invalid tiles and palettes
 			my $invalids = $self->measure_invalid_tiles;
-			my $palettes = scalar(
-				@{$self->measure_valid_palettes});
+			my $palettes = $self->measure_palettes;
 
 			#if this configuration has less bad tiles
 			if (($invalids < $lowest_invalids) ||
@@ -245,8 +243,7 @@ sub optimize_position{
 			
 			# measure the palettes and bad tiles
 			my $invalids = $self->measure_invalid_tiles;
-			my $palettes = scalar(
-				@{$self->measure_valid_palettes});
+			my $palettes = $self->measure_palettes;
 
 			# if less bad tiles
 			if ($invalids < $lowest_invalids
@@ -282,8 +279,7 @@ sub optimize_tiles{
 		# by default, this is the best configuration... so far
 		my $lowest_invalids = $self->measure_invalid_tiles;
 		my $lowest_consumed = $self->measure_tiles_used;
-		my $lowest_palettes = scalar(
-			@{$self->measure_valid_palettes});
+		my $lowest_palettes = $self->measure_palettes;
 		my $best_offset = 0;
 		
 		# nudge each tile row to the right, one pixel at a time
@@ -293,8 +289,7 @@ sub optimize_tiles{
 			# count the tiles used in new configuration
 			my $consumed = $self->measure_tiles_used;
 			my $invalids = $self->measure_invalid_tiles;
-			my $palettes = scalar (
-				@{$self->measure_valid_palettes});
+			my $palettes = $self->measure_palettes;
 			
 			# if this breaks fewer rules
 			if ($invalids < $lowest_invalids
@@ -325,8 +320,7 @@ sub optimize_tiles{
 	# this is the best this configuration can do
 	my $lowest_invalids_row = $self->measure_invalid_tiles;
 	my $lowest_consumed_row = $self->measure_tiles_used;
-	my $lowest_palettes_row = scalar(
-		$self->measure_valid_palettes);
+	my $lowest_palettes_row = $self->measure_palettes;
 
 	#move the rows back to their original configurations
 	for my $tile_row (0..$self->tile_height - 1){
@@ -340,8 +334,7 @@ sub optimize_tiles{
 		# this is by default the best configuration
 		my $lowest_consumed = $self->measure_tiles_used;
 		my $lowest_invalids = $self->measure_invalid_tiles;
-		my $lowest_palettes = scalar (
-			@{$self->measure_valid_palettes});
+		my $lowest_palettes = $self->measure_palettes;
 		my $best_offset = 0;
 
 		# move the columns down one pixel at a time
@@ -351,8 +344,7 @@ sub optimize_tiles{
 			# count the bad tiles, palettes, and tiles used
 			my $consumed = $self->measure_tiles_used;
 			my $invalids = $self->measure_invalid_tiles;
-			my $palettes = scalar(
-				@{$self->measure_valid_palettes});
+			my $palettes = $self->measure_palettes;
 
 			# if this breaks fewer rules
 			if ($invalids < $lowest_invalids
@@ -384,7 +376,7 @@ sub optimize_tiles{
 	# this is the best this configuration can do
 	my $lowest_consumed_column = $self->measure_tiles_used;
 	my $lowest_invalids_column = $self->measure_invalid_tiles;
-	my $lowest_palettes_column = $self->measure_valid_palettes;
+	my $lowest_palettes_column = $self->measure_palettes;
 	
 	
 	# move the columns back to their original configurations
@@ -462,7 +454,16 @@ sub measure_invalid_tiles{
 }
 
 
-sub measure_valid_palettes{
+sub measure_palettes{
+	my $self = shift;
+	my $valids = $self->get_palettes_valid;
+	my $invalids = $self->get_palettes_invalid;
+	my $total = scalar(@$valids) + scalar(@$invalids);
+	return $total;
+}
+
+
+sub get_palettes_valid{
 	my $self = shift;
 	my @palettes;
 	# get all the palettes
@@ -490,6 +491,57 @@ sub measure_valid_palettes{
 			}
 		}
 		if (!$duplicate) {
+			push(@palettes, $test_palette);
+		}
+	}
+	return \@palettes;
+}
+
+
+sub get_palettes_invalid{
+	my $self = shift;
+	my @palettes;
+	
+	# get all the palettes
+	for my $tile (0..$self->tile_count-1) {
+		my $palette = $self->tile_palette($tile);
+
+		# if more colors than allowed
+		if(scalar %{$palette} >= (BIT_DEPTH ** BIT_DEPTH)) {
+			# add to collection
+			push(@palettes, $palette);
+		}
+	}
+	#pull of each palette one by one
+	for my $i (0..$#palettes) {
+		my $test_palette = shift(@palettes);
+
+		# clear the duplicate flag
+		my $duplicate = 0;
+
+		#compare to the rest of the palettes
+		for my $palette (@palettes) {
+
+			# test all colors
+			my @matches = ();
+			for my $color (keys %{$test_palette}) {
+				# if color in other palette
+				if (exists $palette->{$color}) {
+					# add to collection
+					push(@matches, $color);
+				}	
+			}
+			# if every color is in another palette
+			if (scalar %{$test_palette} == scalar @matches) {
+				
+				# it is a duplicate
+				$duplicate = 1;
+				last;
+			}
+		}
+		# if it's not a duplicate
+		if (!$duplicate) {
+			# save it as a unique
 			push(@palettes, $test_palette);
 		}
 	}
@@ -645,7 +697,7 @@ sub write_header {
 	my $self = shift;
 
 	printf "Subsprites\t%d\n", $self->measure_tiles_used;
-	printf "Palettes\t%d\n", scalar(@{$self->measure_valid_palettes});
+	printf "Palettes\t%d\n", $self->measure_palettes;
 	printf "Background\t%02X\n", hex($self->background_color);
 }
 
