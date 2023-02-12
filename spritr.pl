@@ -51,4 +51,3 @@ for my $drawing (@ARGV) {
 	my $sprite = Sprite->new($pixel_lattice);
 	push @sprites, $sprite;
 }
-print scalar @sprites;
