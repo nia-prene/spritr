@@ -12,14 +12,15 @@ use Colorspace;
 
 my @sprites = ();
 # for every file passed
-for my $drawing (@ARGV) {
+for my $file (@ARGV) {
 	
 	# get the images dimension
-	my $dimensions = `identify $drawing | awk '{print \$3}'`;
+	my $name = (split ('\.', $file))[0];
+	my $dimensions = `identify $file | awk '{print \$3}'`;
 	my ($width, $height) = split ("x",$dimensions);
 
 	# get all pixels, removing the column header and hex #
-	my @colors=`convert +dither $drawing -remap pal.bmp txt:- | awk '{print \$3}' | sed 1d | sed 's/#//'`;
+	my @colors=`convert +dither $file -remap pal.bmp txt:- | awk '{print \$3}' | sed 1d | sed 's/#//'`;
 	# remove whitespace
 	chomp @colors;
 
@@ -48,6 +49,6 @@ for my $drawing (@ARGV) {
 		}
 	}
 	# make a new sprite out of pixel lattice
-	my $sprite = Sprite->new($pixel_lattice);
-	push @sprites, $sprite;
+	my $sprite = Sprite->new($name, $pixel_lattice);
+	#push @sprites, $sprite;
 }

@@ -10,6 +10,7 @@ use constant BIT_DEPTH => 2;
 
 sub new{
 	my $class = shift;
+	my $name = shift;
 	my $pixels = shift;
 
 	my $pixel_width = scalar @{$pixels->[0]};
@@ -21,6 +22,7 @@ sub new{
 	my $center_y = $pixel_height / 2;
 	my $background_color = $pixels->[0][0];
 	my $self = {
+		name => $name,
 		pixels => $pixels,
 		pixel_width => $pixel_width,
 		pixel_height => $pixel_height,
@@ -38,21 +40,29 @@ sub new{
 
 	# shift the sprite around to find best config
 	$self->optimize_position;
-	#$self->write_resolved_coordinates;
+	# $self->write_resolved_coordinates;
 
 	# shift rows and columns around to find best config
 	$self->optimize_tiles;
-	#$self->write_optimizations;
+	# $self->write_optimizations;
 	
 	# establish the cononical palettes
-	$self->palettes(($self->get_palettes)[0]);
+	$self->publish_palettes;
 
 	$self->write_header;
 	$self->write_palettes;
-	#$self->write_all_tiles;
-	
+	$self->write_tiles;
 	return $self;
 };
+
+
+sub name{
+	my $self = shift;
+	if (@_) {
+		$self->{name} = shift;	
+	}
+	return $self->{name};
+}
 
 
 sub pixels{
@@ -539,6 +549,7 @@ sub is_tile_used{
 	return 0;
 }
 
+
 sub move_sprite{
 	my $self = shift;
 	my $x_movements = shift;
@@ -646,10 +657,34 @@ sub move_tile_column_vertical {
 }
 
 
+sub publish_palettes {
+	my $self = shift;
+	
+	# get all the valid palettes
+	my $palettes = ($self->get_palettes)[0];
+
+	# make place for published palette
+	my @finals = ();
+	
+	# take every palette, assign number to the keys from light to dark
+	for my $palette (@$palettes) {
+		my $count = 0;
+		my $final = {};
+		for my $color (sort keys %{$palette}) {
+			$final->{$color} = ++$count;
+		}
+		# add to the final palette
+		push @finals, $final;
+	}
+	# publish it
+	$self->palettes(\@finals);
+}
+
+
 sub write_header {
 	my $self = shift;
-
-	printf "Subsprites\t%d\n", $self->measure_tiles_used;
+	printf "Name\t\t%s\n", $self->name;
+	printf "Tiles\t\t%d\n", $self->measure_tiles_used;
 	printf "Palettes\t%d\n", $self->measure_palettes;
 	printf "Background\t%02X\n", hex($self->background_color);
 }
@@ -658,81 +693,84 @@ sub write_header {
 sub write_palettes {
 	my $self = shift;
 	
-	for my $i (0..$#{$self->palettes}) {
-		printf "  Palette%02X:\t", $i;
-		for my $color (sort keys %{$self->palettes->[$i]}) {
-			printf "%02X ", hex($color);
+	# for every palette
+	my $palettes_written = 0;
+	for my $palette (@{$self->palettes}) {
+
+		# print numerical label
+		printf "  Palette%02X:\t", $palettes_written++;
+		
+		#for every color
+		my $colors_written = 0;
+		for my $color (sort keys %$palette) {
+
+			# if not the last color, print comma. else new line
+			if(++$colors_written != scalar %$palette) {
+				print $color,",";
+			} else {
+				print $color,"\n";
+			}
 		}
-		print "\n";
 	}
 }
 
-sub write_all_tiles {
+
+sub write_tiles {
 	my $self = shift;
 	my $tiles_written = 0;
-
+	
+	# loop through tile collection, process if active
 	for my $tile (0..$self->tile_count-1) {
 		if ($self->is_tile_used($tile)) {
 			
-			# print the number and coordinate
-			printf "  Tile%02X\t", $tiles_written;
-			$self->write_tile_coordinates($tile, 
-				$tiles_written++);
-			# print the binary tile
-			$self->write_tile_pixels($tile);
+			# print name, coordinates, pixels
+			printf "  Tile%02X\t", $tiles_written++;
+			my ($x, $y) = $self->get_tile_coordinates($tile);
+			printf "%d,%d\n", $x,$y;
+			my $reference = $self->get_palette_reference($tile);
+			print "  Palette\t$reference\n";
+			#$self->write_bitplanes($tile,$reference);
+			#TODO
+			$self->write_references($tile,$reference);
 		}
 	}
 }
 
 
-sub write_tile_pixels {
+sub write_bitplanes{
 	my $self = shift;
 	my $tile = shift;
-	my $tile_palette = $self->tile_palette($tile);
-	my @final_palette;
-	my $palette_number;
+	my $reference = shift;
+	my $palette = $self->palettes->[$reference];
 	
-	my $matches = 1;
-	for my $i (0..$#{$self->palettes}) {
-		for my $color (keys %{$tile_palette}) {
-			if (exists $self->palettes->[$i]->{$color}) {
-				$matches = 1;
-			} else {
-				$matches = 0;
-				last;
-			}
-		}
-		if ($matches) { 
-			@final_palette = sort keys %{$self->palettes->[$i]};
-			unshift (@final_palette, $self->background_color);
-			$palette_number = $i;
-		}
-	}
-
-	printf "  Palette\t%02X\n", $palette_number;
 	#get the top left pixel of the pixel data
 	my $tile_x = ($tile % $self->tile_width) * TILE_WIDTH;
 	my $tile_y = int($tile / $self->tile_width) * TILE_HEIGHT;
-	my $line = 0;
 	
-	
-	for my $plane (0..BIT_DEPTH-2) {
+	for my $plane (0..BIT_DEPTH-1) {
+		printf "  plane%d\t",$plane;
 
 	#for each pixel row in this tile	
-		for my $row ($tile_y..($tile_y + (TILE_HEIGHT - 1))) {
-			printf "  .\t\t";
-			#for each pixel in that row
-			for my $column ($tile_x..
-				($tile_x + TILE_WIDTH)-1) {
-				for my $i (0..$#final_palette){
-					if (hex(
-					$self->pixels->[$row][$column]) 
-						== hex(
-						$final_palette[$i])) {
-						my $bit = ($i & (0b1<<$plane)) >> $plane;
-						#print $bit;
-						printf "%X", $i;
-					}
+		for my $row ($tile_y..($tile_y+(TILE_HEIGHT-1))) {
+			
+			# dont print dot on new line
+			if ($row % TILE_HEIGHT) {
+				print "  .\t\t";
+			}
+
+			# go through pixels in row
+			for my $column ($tile_x..($tile_x+(TILE_WIDTH-1))) {
+				
+				#fetch the color, then the reference
+				my $color = $self->pixels->[$row][$column];
+				my $reference = $palette->{$color};
+
+				# if not the background color, print bit
+				if ($reference) {
+					my $bit = ($reference >> $plane)&1;
+					print $bit;
+				} else {
+					print 0;
 				}
 			}
 			print "\n";
@@ -741,12 +779,63 @@ sub write_tile_pixels {
 }
 
 
-sub write_tile_coordinates {
+sub write_references{
 	my $self = shift;
 	my $tile = shift;
-	my $optimizations;
-	my $optimization_offset;
+	my $reference = shift;
+	my $palette = $self->palettes->[$reference];
+	
+	#get the top left pixel of the pixel data
+	my $tile_x = ($tile % $self->tile_width) * TILE_WIDTH;
+	my $tile_y = int($tile / $self->tile_width) * TILE_HEIGHT;
+	
+	#for each pixel row in this tile	
+	for my $row ($tile_y..($tile_y+(TILE_HEIGHT-1))) {
+		
+		# print dots for the eyes
+		print "  .\t\t";
 
+		# go through pixels in row
+		for my $column ($tile_x..($tile_x+(TILE_WIDTH-1))) {
+			
+			#fetch the color, then the reference
+			my $color = $self->pixels->[$row][$column];
+			my $reference = $palette->{$color};
+
+			# if not the background color, print bit
+			if ($reference) {
+				print $reference;
+			} else {
+				print 0;
+			}
+		}
+		print "\n";
+	}
+}
+
+
+sub get_palette_reference{
+	my $self = shift;
+	my $tile = shift;
+	
+	# compare against every master palette
+	for my $i (0..$#{$self->palettes}) {
+		my $palette = $self->tile_palette($tile);
+		my $reference = $self->palettes->[$i];
+		my $size = scalar %$reference;
+		for my $color (keys %{$self->palettes->[$i]}) {
+			$palette->{$color} = 1;
+		}
+		if (scalar(%$palette) == $size){
+			return $i;
+		}
+	}
+}
+
+
+sub get_tile_coordinates{
+	my $self = shift;
+	my $tile = shift;
 
 	# get the base coordinates, the top left
 	my $tile_x = ($tile % ($self->pixel_width / TILE_WIDTH)) 
@@ -758,30 +847,29 @@ sub write_tile_coordinates {
 	$tile_x = $tile_x - $self->center_x;
 	$tile_y = $tile_y - $self->center_y;
 	
-	# if it was compressed by column, 
-	if ($self->lowest_tiles_row <= $self->lowest_tiles_column) {
+	# if it was compressed by row, 
+	if ($self->best_offsets_row) {
 		
 		# find the optimization for this tile
-		$optimization_offset = int(
+		my $optimization_offset = int(
 			$tile / $self->tile_width);
-		$optimizations = $self->best_offsets_row;
+		my $optimizations = $self->best_offsets_row;
 
 		# account for the optimization
 		$tile_x = $tile_x - $optimizations->[$optimization_offset];
 	}
-	# if it was compressed by row
-	if ($self->lowest_tiles_column < $self->lowest_tiles_row) {
+
+	# if it was compressed by column 
+	if ($self->best_offsets_column) {
 		
 		# find the optimization for this tile
-		$optimization_offset = $tile % $self->tile_width;
-		$optimizations = $self->best_offsets_column;
+		my $optimization_offset = $tile % $self->tile_width;
+		my $optimizations = $self->best_offsets_column;
 
 		# account for the optimization
 		$tile_y = $tile_y - $optimizations->[$optimization_offset];
 	}
-	
-	# write the coordinates
-	printf "%d,%d\n", $tile_x,$tile_y;
+	return ($tile_x, $tile_y);
 }
 
 
