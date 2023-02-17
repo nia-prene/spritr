@@ -4,6 +4,8 @@ use strict;
 use warnings;
 
 #sprite tile dimensions
+use constant TILE_HEIGHT => 16;
+use constant TILE_WIDTH => 8;
 use constant BIT_DEPTH => 2;
 
 sub new{
@@ -12,7 +14,6 @@ sub new{
 	my $pixels = shift;
 	my $tile_pixel_width = shift;
 	my $tile_pixel_height = shift;
-	my $bit_depth = shift;
 
 	my $pixel_width = scalar @{$pixels->[0]};
 	my $pixel_height = scalar @{$pixels};
@@ -34,8 +35,7 @@ sub new{
 		tile_pixel_height => $tile_pixel_height,
 		center_x => $center_x,
 		center_y => $center_y,
-		background_color => $background_color,
-		bit_depth => $bit_depth
+		background_color => $background_color
 	};
 	bless $self, $class;
 	
@@ -110,12 +110,6 @@ sub background_color{
 }
 
 
-sub bit_depth{
-	my $self = shift;
-	return $self->{bit_depth};
-}
-
-
 sub tile_width{
 	my $self = shift;
 	return $self->{tile_width};
@@ -180,15 +174,15 @@ sub tile_palette{
 
 	#get the top left pixel of the pixel data
 	my $tile_x = ($tile 
-		% ($self->pixel_width / $self->tile_pixel_width)) 
-		* $self->tile_pixel_width;
+		% ($self->pixel_width / TILE_WIDTH)) 
+		* TILE_WIDTH;
 	my $tile_y = (int($tile 
-		/ ($self->pixel_width / $self->tile_pixel_width)))
-		* $self->tile_pixel_height;
+		/ ($self->pixel_width / TILE_WIDTH)))
+		* TILE_HEIGHT;
 	#for each pixel row in this tile	
-	for my $row ($tile_y..($tile_y + ($self->tile_pixel_height - 1))) {
+	for my $row ($tile_y..($tile_y + (TILE_HEIGHT - 1))) {
 		#for each pixel in that row
-		for my $column ($tile_x..($tile_x + $self->tile_pixel_width)-1) {
+		for my $column ($tile_x..($tile_x + TILE_WIDTH)-1) {
 			#get the hex color
 			my $color = $self->pixels->[$row][$column];
 			
@@ -204,10 +198,10 @@ sub tile_palette{
 
 sub confirm_sprite{
 	my $self = shift;
-	if ($self->pixel_width % $self->tile_pixel_width){
+	if ($self->pixel_width % TILE_WIDTH){
 		die qq(nonstandard tile width);
 	}
-	if ($self->pixel_height % $self->tile_pixel_height){
+	if ($self->pixel_height % TILE_HEIGHT){
 		die qq(nonstandard tile height);
 	}
 	for my $row (@{$self->pixels}){
@@ -226,7 +220,7 @@ sub optimize_position{
 	my $best_offset_y = 0;
 	
 	#move entire sprite 1 pixel left at a time
-	for my $i (1..$self->tile_pixel_width) {
+	for my $i (1..TILE_WIDTH) {
 		$self->move_sprite(-1,0);
 		
 		#count invalid tiles and palettes
@@ -247,10 +241,10 @@ sub optimize_position{
 		}
 	}
 	#move sprite to the best offset
-	$self->move_sprite($self->tile_pixel_width + $best_offset_x, 0);
+	$self->move_sprite(TILE_WIDTH + $best_offset_x, 0);
 	
 	# move sprite up one tile at a time
-	for my $i (1..$self->tile_pixel_height) {
+	for my $i (1..TILE_HEIGHT) {
 		$self->move_sprite(0,-1);
 		
 		# measure the palettes and bad tiles
@@ -271,7 +265,7 @@ sub optimize_position{
 		}
 	}
 	#move to optimal spot
-	$self->move_sprite(0, $self->tile_pixel_height + $best_offset_y);
+	$self->move_sprite(0, TILE_HEIGHT + $best_offset_y);
 }
 
 
@@ -292,7 +286,7 @@ sub optimize_tiles{
 		my $best_offset = 0;
 		
 		# nudge each tile row to the right, one pixel at a time
-		for my $i (1..$self->tile_pixel_width) {
+		for my $i (1..TILE_WIDTH) {
 			$self->move_tile_row_horizontal($tile_row, 1);
 
 			# count the tiles used in new configuration
@@ -323,7 +317,7 @@ sub optimize_tiles{
 
 		#move the the best configuration
 		$self->move_tile_row_horizontal($tile_row, 
-			-$self->tile_pixel_width + $best_offset);
+			-TILE_WIDTH + $best_offset);
 	}
 
 	# this is the best this configuration can do
@@ -347,7 +341,7 @@ sub optimize_tiles{
 		my $best_offset = 0;
 
 		# move the columns down one pixel at a time
-		for my $i (1..$self->tile_pixel_height) {
+		for my $i (1..TILE_HEIGHT) {
 			$self->move_tile_column_vertical($tile_column, 1);
 
 			# count the bad tiles, palettes, and tiles used
@@ -379,7 +373,7 @@ sub optimize_tiles{
 		
 		# move to the optimal position
 		$self->move_tile_column_vertical($tile_column, 
-			-$self->tile_pixel_height + $best_offset);
+			-TILE_HEIGHT + $best_offset);
 	}
 	
 	# this is the best this configuration can do
@@ -460,7 +454,7 @@ sub get_palettes{
 	for my $tile (0..$self->tile_count-1) {
 		my $palette = $self->tile_palette($tile);
 		# if within bitdepth add to valid collection
-		if(scalar %{$palette} < (2 ** BIT_DEPTH)) {
+		if(scalar %{$palette} < (BIT_DEPTH ** BIT_DEPTH)) {
 			push(@valids, $palette);
 
 		# else add to invalid collection
@@ -540,7 +534,7 @@ sub is_tile_valid{
 	# get palette
 	my $palette = $self->tile_palette($tile);
 	# if within bit depth
-	if ((scalar %{$palette}) < (2 ** BIT_DEPTH)){
+	if ((scalar %{$palette}) < (BIT_DEPTH ** BIT_DEPTH)){
 		return 1;
 	}
 	return 0;
@@ -629,8 +623,8 @@ sub move_tile_row_horizontal{
 	my $tile_row = shift;
 	my $x_movements = shift;
 	
-	my $pixel_row_start = $tile_row * $self->tile_pixel_height;
-	my $pixel_row_end = ($tile_row * $self->tile_pixel_height) + ($self->tile_pixel_height - 1);
+	my $pixel_row_start = $tile_row * TILE_HEIGHT;
+	my $pixel_row_end = ($tile_row * TILE_HEIGHT) + (TILE_HEIGHT - 1);
 
 	#if moving left
 	if ($x_movements < 0) {
@@ -659,8 +653,8 @@ sub move_tile_column_vertical {
 	my $tile_column = shift;
 	my $y_movements = shift;
 	my @replacement_pixel_buffer = ();
-	my $pixel_column_start = $tile_column * $self->tile_pixel_width;
-	my $pixel_column_end = $pixel_column_start + ($self->tile_pixel_width - 1);
+	my $pixel_column_start = $tile_column * TILE_WIDTH;
+	my $pixel_column_end = $pixel_column_start + (TILE_WIDTH - 1);
 
 	#replace the segment of the row with the one above or below
 	for my $pixel_row (0..$#{$self->pixels}) {
@@ -673,7 +667,7 @@ sub move_tile_column_vertical {
 	}
 	for my $pixel_row (0..$#{$self->pixels}) {
 		splice(@{$self->pixels->[$pixel_row]}, 
-			$pixel_column_start, $self->tile_pixel_width, 
+			$pixel_column_start, TILE_WIDTH, 
 			@{$replacement_pixel_buffer[$pixel_row]});
 	}
 }
@@ -766,22 +760,22 @@ sub write_bitplanes{
 	my $palette = $self->palettes->[$reference];
 	
 	#get the top left pixel of the pixel data
-	my $tile_x = ($tile % $self->tile_width) * $self->tile_pixel_width;
-	my $tile_y = int($tile / $self->tile_width) * $self->tile_pixel_height;
+	my $tile_x = ($tile % $self->tile_width) * TILE_WIDTH;
+	my $tile_y = int($tile / $self->tile_width) * TILE_HEIGHT;
 	
 	for my $plane (0..BIT_DEPTH-1) {
 		printf "  plane%d\t",$plane;
 
 	#for each pixel row in this tile	
-		for my $row ($tile_y..($tile_y+($self->tile_pixel_height-1))) {
+		for my $row ($tile_y..($tile_y+(TILE_HEIGHT-1))) {
 			
 			# dont print dot on new line
-			if ($row % $self->tile_pixel_height) {
+			if ($row % TILE_HEIGHT) {
 				print "  .\t\t";
 			}
 
 			# go through pixels in row
-			for my $column ($tile_x..($tile_x+($self->tile_pixel_width-1))) {
+			for my $column ($tile_x..($tile_x+(TILE_WIDTH-1))) {
 				
 				#fetch the color, then the reference
 				my $color = $self->pixels->[$row][$column];
@@ -808,17 +802,17 @@ sub write_references{
 	my $palette = $self->palettes->[$reference];
 	
 	#get the top left pixel of the pixel data
-	my $tile_x = ($tile % $self->tile_width) * $self->tile_pixel_width;
-	my $tile_y = int($tile / $self->tile_width) * $self->tile_pixel_height;
+	my $tile_x = ($tile % $self->tile_width) * TILE_WIDTH;
+	my $tile_y = int($tile / $self->tile_width) * TILE_HEIGHT;
 	
 	#for each pixel row in this tile	
-	for my $row ($tile_y..($tile_y+($self->tile_pixel_height-1))) {
+	for my $row ($tile_y..($tile_y+(TILE_HEIGHT-1))) {
 		
 		# print dots for the eyes
 		print "  .\t\t";
 
 		# go through pixels in row
-		for my $column ($tile_x..($tile_x+($self->tile_pixel_width-1))) {
+		for my $column ($tile_x..($tile_x+(TILE_WIDTH-1))) {
 			
 			#fetch the color, then the reference
 			my $color = $self->pixels->[$row][$column];
@@ -860,10 +854,10 @@ sub get_tile_coordinates{
 	my $tile = shift;
 
 	# get the base coordinates, the top left
-	my $tile_x = ($tile % ($self->pixel_width / $self->tile_pixel_width)) 
-		* $self->tile_pixel_width;
-	my $tile_y = (int($tile / ($self->pixel_width / $self->tile_pixel_width)))
-		* $self->tile_pixel_height;
+	my $tile_x = ($tile % ($self->pixel_width / TILE_WIDTH)) 
+		* TILE_WIDTH;
+	my $tile_y = (int($tile / ($self->pixel_width / TILE_WIDTH)))
+		* TILE_HEIGHT;
 	
 	# adjust the coordinates based on the actual center of the sprite
 	$tile_x = $tile_x - $self->center_x;
