@@ -3,9 +3,6 @@ package Sprite;
 use strict;
 use warnings;
 
-#sprite tile dimensions
-use constant BIT_DEPTH => 2;
-
 sub new{
 	my $class = shift;
 	my $name = shift;
@@ -460,7 +457,7 @@ sub get_palettes{
 	for my $tile (0..$self->tile_count-1) {
 		my $palette = $self->tile_palette($tile);
 		# if within bitdepth add to valid collection
-		if(scalar %{$palette} < (2 ** BIT_DEPTH)) {
+		if(scalar %{$palette} < (2 ** $self->bit_depth)) {
 			push(@valids, $palette);
 
 		# else add to invalid collection
@@ -540,7 +537,7 @@ sub is_tile_valid{
 	# get palette
 	my $palette = $self->tile_palette($tile);
 	# if within bit depth
-	if ((scalar %{$palette}) < (2 ** BIT_DEPTH)){
+	if ((scalar %{$palette}) < (2 ** $self->bit_depth)){
 		return 1;
 	}
 	return 0;
@@ -769,7 +766,7 @@ sub write_bitplanes{
 	my $tile_x = ($tile % $self->tile_width) * $self->tile_pixel_width;
 	my $tile_y = int($tile / $self->tile_width) * $self->tile_pixel_height;
 	
-	for my $plane (0..BIT_DEPTH-1) {
+	for my $plane (0..$self->bit_depth-1) {
 		printf "  plane%d\t",$plane;
 
 	#for each pixel row in this tile	
@@ -929,7 +926,6 @@ sub write_resolved_coordinates {
 	print $self->center_y - ($self->pixel_height / 2);
 	print "\n";
 }
-
 
 
 1;
